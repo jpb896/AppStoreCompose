@@ -1,5 +1,7 @@
 package com.jpb.appstore.data
 
+import com.jpb.appstore.utils.AppItem
+import com.jpb.appstore.utils.InstallState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
@@ -105,5 +107,30 @@ class FdroidRepoParser {
         }
 
         return@withContext parsedStoreData
+    }
+}
+
+class FdroidRepositorySource : AppRepositorySource {
+    private val parser = FdroidRepoParser()
+
+    override suspend fun fetchApps(repoUrl: String): List<AppItem> {
+        val fdroidApps = parser.parseRepo(repoUrl)
+        return fdroidApps.map { fdroidApp ->
+            val latestRelease = fdroidApp.releases.firstOrNull()
+            val sizeMb = latestRelease?.sizeBytes?.let { "${it / (1024 * 1024)} MB" } ?: "15 MB"
+
+            AppItem(
+                id = fdroidApp.packageId,
+                name = fdroidApp.name,
+                developer = "F-Droid Developer",
+                repo = repoUrl,
+                size = sizeMb,
+                version = latestRelease?.versionName ?: "1.0",
+                category = fdroidApp.categories.firstOrNull() ?: "General",
+                iconUrl = "",
+                state = InstallState.Idle,
+                hasUpdate = false
+            )
+        }
     }
 }

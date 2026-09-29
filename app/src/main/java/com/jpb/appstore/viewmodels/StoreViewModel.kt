@@ -2,7 +2,8 @@ package com.jpb.appstore.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.jpb.appstore.data.FdroidRepoParser
+import com.jpb.appstore.data.CustomRepositorySource
+import com.jpb.appstore.data.FdroidRepositorySource
 import com.jpb.appstore.utils.AppItem
 import com.jpb.appstore.utils.InstallState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,49 +19,61 @@ data class RepositoryItem(
 )
 
 class StoreViewModel : ViewModel() {
-    private val parser = FdroidRepoParser()
+    private val fdroidSource = FdroidRepositorySource()
+    private val customSource = CustomRepositorySource()
 
     private val _apps = MutableStateFlow<List<AppItem>>(emptyList())
     val apps: StateFlow<List<AppItem>> = _apps.asStateFlow()
 
     private val _repositories = MutableStateFlow<List<RepositoryItem>>(
-        listOf(RepositoryItem("F-Droid Official", "https://f-droid.org/repo", 0))
+        listOf(
+            RepositoryItem("F-Droid Official", "https://f-droid.org/repo", 0),
+            RepositoryItem("Custom Repository", "https://my-custom-repo.com/index.json", 0)
+        )
     )
     val repositories: StateFlow<List<RepositoryItem>> = _repositories.asStateFlow()
 
     init {
-        fetchRealApps("https://f-droid.org/repo")
+        loadAllRepositories()
+    }
+
+    fun loadAllRepositories() {
+        viewModelScope.launch {
+            try {
+                // Fetch from both F-Droid and your custom repo concurrently or sequentially
+                val fdroidApps = fdroidSource.fetchApps("https://f-droid.org/repo")
+                val customApps = customSource.fetchApps("https://my-custom-repo.com/index.json")
+
+                val combinedApps = fdroidApps + customApps
+                _apps.value = combinedApps
+
+                // Update repository item app counts dynamically
+                _repositories.value = listOf(
+                    RepositoryItem("CaesiumOS/VouloirOS System Apps Repo", "https://my-custom-repo.com/index.json", customApps.size),
+                    RepositoryItem("F-Droid Official", "https://f-droid.org/repo", fdroidApps.size)
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     fun fetchRealApps(repoUrl: String) {
         viewModelScope.launch {
             try {
-                val fdroidApps = parser.parseRepo(repoUrl)
-
-                val mappedApps = fdroidApps.map { fdroidApp ->
-                    val latestRelease = fdroidApp.releases.firstOrNull()
-                    val sizeMb = latestRelease?.sizeBytes?.let { "${it / (1024 * 1024)} MB" } ?: "15 MB"
-
-                    AppItem(
-                        id = fdroidApp.packageId,
-                        name = fdroidApp.name,
-                        developer = "F-Droid Developer",
-                        repo = repoUrl,
-                        size = sizeMb,
-                        version = latestRelease?.versionName ?: "1.0",
-                        category = fdroidApp.categories.firstOrNull() ?: "General",
-                        iconUrl = "",
-                        state = InstallState.Idle,
-                        hasUpdate = false
-                    )
+                val fetchedApps = if (repoUrl.contains("f-droid.org")) {
+                    fdroidSource.fetchApps(repoUrl)
+                } else {
+                    customSource.fetchApps(repoUrl)
                 }
 
-                if (mappedApps.isNotEmpty()) {
-                    _apps.value = mappedApps
-                    // Update repository item app count dynamically
-                    _repositories.value = listOf(
-                        RepositoryItem("F-Droid Official", repoUrl, mappedApps.size)
-                    )
+                if (fetchedApps.isNotEmpty()) {
+                    val currentApps = _apps.value.filter { it.repo != repoUrl }
+                    _apps.value = currentApps + fetchedApps
+
+                    _repositories.value = _repositories.value.map { repo ->
+                        if (repo.url == repoUrl) repo.copy(appCount = fetchedApps.size) else repo
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -77,7 +90,6 @@ class StoreViewModel : ViewModel() {
                     app
                 }
             }
-            // You can add your actual download logic or progress simulation here
         }
     }
 
