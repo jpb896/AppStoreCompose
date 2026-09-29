@@ -23,14 +23,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -137,8 +142,10 @@ fun AppStoreApp(viewModel: StoreViewModel = viewModel()) {
                             onAppClick = { app -> selectedAppId = app.id }
                         )
                         AppDestinations.APPS -> AppsLibraryScreen()
-                        AppDestinations.UPDATES -> UpdatesScreen()
-                    }
+                        AppDestinations.UPDATES -> UpdatesScreen(
+                            viewModel = viewModel,
+                            onAppClick = { app -> selectedAppId = app.id }
+                        )                    }
                 }
             }
         }
@@ -162,9 +169,275 @@ fun AppsLibraryScreen() {
 }
 
 @Composable
-fun UpdatesScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Pending App Updates", style = MaterialTheme.typography.bodyLarge)
+fun UpdatesScreen(
+    viewModel: StoreViewModel,
+    onAppClick: (AppItem) -> Unit
+) {
+    val apps by viewModel.apps.collectAsState()
+    // Filter apps that have an update available or are currently downloading/installing
+    val updatesList = apps.filter { it.hasUpdate || it.state !is InstallState.Idle && it.state !is InstallState.Installed }
+
+    val isAnyDownloading = updatesList.any { it.state is InstallState.Downloading || it.state is InstallState.Installing }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.Top
+    ) {
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Top Bar Header & "Update all" / "Cancel all" Action Button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (updatesList.isNotEmpty()) "Available updates (${updatesList.size})" else "",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            if (updatesList.isNotEmpty()) {
+                FilledTonalButton(
+                    onClick = {
+                        if (isAnyDownloading) {
+                            updatesList.forEach { viewModel.cancelAction(it.id) }
+                        } else {
+                            updatesList.forEach { viewModel.startDownload(it.id) }
+                        }
+                    },
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(if (isAnyDownloading) "Cancel all" else "Update all")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (updatesList.isEmpty()) {
+            // "You're all set" Empty State matching Google Play
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(24.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "You're all set",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "All your apps are up to date",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { /* Refresh/Check action */ },
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text("Check for updates")
+                    }
+                }
+            }
+        } else {
+            // List of Update items matching Google Play layout
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(updatesList, key = { it.id }) { app ->
+                    UpdateCardItem(
+                        app = app,
+                        onCardClick = { onAppClick(app) },
+                        onUpdateClick = { viewModel.startDownload(app.id) },
+                        onCancelClick = { viewModel.cancelAction(app.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UpdateCardItem(
+    app: AppItem,
+    onCardClick: () -> Unit,
+    onUpdateClick: () -> Unit,
+    onCancelClick: () -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Card(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    // Circular progress during download or normal icon container
+                    when (app.state) {
+                        is InstallState.Downloading -> {
+                            val progress = (app.state as InstallState.Downloading).progress
+                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.fillMaxSize(),
+                                    strokeWidth = 3.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = app.name.take(2), style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                        else -> {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = app.name.take(2), style = MaterialTheme.typography.titleSmall)
+                            }
+                        }
+                    }
+
+                    Column {
+                        Text(text = app.name, style = MaterialTheme.typography.bodyLarge)
+
+                        when (app.state) {
+                            is InstallState.Downloading -> {
+                                val progress = (app.state as InstallState.Downloading).progress
+                                val percent = (progress * 100).toInt()
+                                Text(
+                                    text = "${app.size}  $percent% of 20.07 MB",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            is InstallState.Installing -> {
+                                Text(
+                                    text = "${app.size}  Installing...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = "${app.size} • Updated yesterday",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Trailing Action Controls (Update button, Cancel 'X' button, or Dropdown Arrow)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    when (app.state) {
+                        is InstallState.Idle -> {
+                            FilledTonalButton(
+                                onClick = onUpdateClick,
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Text("Update")
+                            }
+                        }
+                        is InstallState.Downloading, is InstallState.Installing -> {
+                            IconButton(onClick = onCancelClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        else -> {}
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Collapsible "What's new" section matching Google Play layout
+            if (expanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(modifier = Modifier.fillMaxWidth().height(1.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(text = "What's new", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "• Performance improvements and bug fixes for version ${app.version}.\n• Enhanced repository syncing speed and secure background verification.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
