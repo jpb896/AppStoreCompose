@@ -17,13 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.jpb.appstore.utils.AppItem
+import com.jpb.appstore.utils.InstallState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppDetailScreen(
     app: AppItem,
     onBackClick: () -> Unit,
-    onInstallClick: () -> Unit
+    onInstallClick: () -> Unit,
+    onCancelClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -52,25 +54,58 @@ fun AppDetailScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // 1. App Header: Icon, Title, Developer & Badges
+            // 1. App Header: Circular Progress Icon, Title, Developer & Dynamic Download Stats
             item {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = app.name.take(2),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                    when (app.state) {
+                        is InstallState.Downloading -> {
+                            val progress = (app.state as InstallState.Downloading).progress
+                            Box(
+                                modifier = Modifier.size(92.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.fillMaxSize(),
+                                    strokeWidth = 4.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(68.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = app.name.take(2),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = app.name.take(2),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
+
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = app.name,
@@ -81,11 +116,32 @@ fun AppDetailScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            text = "In-app purchases • ${app.size}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+
+                        when (app.state) {
+                            is InstallState.Downloading -> {
+                                val progress = (app.state as InstallState.Downloading).progress
+                                val percent = (progress * 100).toInt()
+                                Text(
+                                    text = "$percent% of ${app.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            is InstallState.Installing -> {
+                                Text(
+                                    text = "Installing...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = "In-app purchases • ${app.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -105,16 +161,43 @@ fun AppDetailScreen(
                 }
             }
 
-            // 3. Primary Install/Action Button
+            // 3. Primary Action Button (Changes dynamically based on state)
             item {
-                Button(
-                    onClick = onInstallClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text(text = if (app.hasUpdate) "Update" else "Install")
+                when (app.state) {
+                    is InstallState.Downloading -> {
+                        OutlinedButton(
+                            onClick = onCancelClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text(text = "Cancel")
+                        }
+                    }
+                    is InstallState.Installing -> {
+                        Button(
+                            onClick = { },
+                            enabled = false,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text(text = "Installing...")
+                        }
+                    }
+                    else -> {
+                        Button(
+                            onClick = onInstallClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text(text = if (app.hasUpdate) "Update" else "Install")
+                        }
+                    }
                 }
             }
 
