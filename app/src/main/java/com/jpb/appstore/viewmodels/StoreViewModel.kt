@@ -25,6 +25,12 @@ class StoreViewModel : ViewModel() {
         loadInitialMockData()
     }
 
+    enum class CardLayoutType {
+        HERO_BANNER,
+        STANDARD_LIST,
+        HORIZONTAL_GRID
+    }
+
     private fun loadInitialMockData() {
         _apps.value = listOf(
             AppItem(

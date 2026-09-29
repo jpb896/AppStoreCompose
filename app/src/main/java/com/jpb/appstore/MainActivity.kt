@@ -19,14 +19,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
@@ -61,6 +66,8 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jpb.appstore.ui.AppDetailScreen
+import com.jpb.appstore.ui.HeroBannerCard
+import com.jpb.appstore.ui.HorizontalAppsGrid
 import com.jpb.appstore.ui.theme.AppStoreTheme
 import com.jpb.appstore.utils.AppItem
 import com.jpb.appstore.utils.InstallState
@@ -84,6 +91,8 @@ class MainActivity : ComponentActivity() {
 fun AppStoreApp(viewModel: StoreViewModel = viewModel()) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     var selectedAppId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeCategoryTitle by rememberSaveable { mutableStateOf<String?>(null) }
+    var isEditorsChoice by rememberSaveable { mutableStateOf(false) }
 
     val apps by viewModel.apps.collectAsState()
     val selectedApp = apps.find { it.id == selectedAppId }
@@ -98,6 +107,22 @@ fun AppStoreApp(viewModel: StoreViewModel = viewModel()) {
             onCancelClick = {
                 viewModel.cancelAction(selectedApp.id)
             }
+        )
+    } else if (isEditorsChoice) {
+        EditorsChoiceScreen(
+            apps = apps,
+            onBackClick = { isEditorsChoice = false },
+            onAppClick = { app -> selectedAppId = app.id },
+            onInstallClick = { appId -> viewModel.startDownload(appId) },
+            onCancelClick = { appId -> viewModel.cancelAction(appId) }
+        )
+    } else if (activeCategoryTitle != null) {
+        CategoryAppsScreen(
+            title = activeCategoryTitle!!,
+            subtitle = "Discover local developers & top picks",
+            apps = apps,
+            onBackClick = { activeCategoryTitle = null },
+            onAppClick = { app -> selectedAppId = app.id }
         )
     } else {
         NavigationSuiteScaffold(
@@ -123,8 +148,7 @@ fun AppStoreApp(viewModel: StoreViewModel = viewModel()) {
                     TopAppBar(
                         title = {
                             Column {
-                                Text("AuroraDroid Store", style = MaterialTheme.typography.titleMedium)
-                                Text("System OS & Custom Repos", style = MaterialTheme.typography.bodySmall)
+                                Text("Store", style = MaterialTheme.typography.titleMedium)
                             }
                         },
                         actions = {
@@ -139,13 +163,16 @@ fun AppStoreApp(viewModel: StoreViewModel = viewModel()) {
                     when (currentDestination) {
                         AppDestinations.HOME -> HomeScreen(
                             viewModel = viewModel,
-                            onAppClick = { app -> selectedAppId = app.id }
+                            onAppClick = { app -> selectedAppId = app.id },
+                            onSeeAllUkApps = { activeCategoryTitle = "Apps made in the UK" },
+                            onSeeAllEditorsChoice = { isEditorsChoice = true }
                         )
                         AppDestinations.APPS -> AppsLibraryScreen()
                         AppDestinations.UPDATES -> UpdatesScreen(
                             viewModel = viewModel,
                             onAppClick = { app -> selectedAppId = app.id }
-                        )                    }
+                        )
+                    }
                 }
             }
         }
@@ -168,15 +195,300 @@ fun AppsLibraryScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryAppsScreen(
+    title: String,
+    subtitle: String,
+    apps: List<AppItem>,
+    onBackClick: () -> Unit,
+    onAppClick: (AppItem) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(title, style = MaterialTheme.typography.titleMedium)
+                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(apps, key = { it.id }) { app ->
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Card(
+                        onClick = { onAppClick(app) },
+                        modifier = Modifier.size(80.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = app.name.take(2), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = app.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "4.6 ★",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditorsChoiceScreen(
+    apps: List<AppItem>,
+    onBackClick: () -> Unit,
+    onAppClick: (AppItem) -> Unit,
+    onInstallClick: (String) -> Unit,
+    onCancelClick: (String) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Editors' choice apps", style = MaterialTheme.typography.titleMedium)
+                        Text("Hand-picked apps and games", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(apps, key = { it.id }) { app ->
+                EditorsChoiceCardItem(
+                    app = app,
+                    onCardClick = { onAppClick(app) },
+                    onInstallClick = { onInstallClick(app.id) },
+                    onCancelClick = { onCancelClick(app.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EditorsChoiceCardItem(
+    app: AppItem,
+    onCardClick: () -> Unit,
+    onInstallClick: () -> Unit,
+    onCancelClick: () -> Unit
+) {
+    Card(
+        onClick = onCardClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    when (app.state) {
+                        is InstallState.Downloading -> {
+                            val progress = (app.state as InstallState.Downloading).progress
+                            Box(
+                                modifier = Modifier.size(52.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.fillMaxSize(),
+                                    strokeWidth = 3.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = app.name.take(2), style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                        else -> {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = app.name.take(2), style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    }
+
+                    Column {
+                        Text(text = app.name, style = MaterialTheme.typography.titleMedium)
+
+                        when (app.state) {
+                            is InstallState.Downloading -> {
+                                val progress = (app.state as InstallState.Downloading).progress
+                                val percent = (progress * 100).toInt()
+                                Column {
+                                    Text(
+                                        text = "$percent% of ${app.size}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Security,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Verified secure",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                            is InstallState.Installing -> {
+                                Text(
+                                    text = "Installing...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = "4.7 ★  •  Editors' Choice",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box {
+                    when (app.state) {
+                        is InstallState.Idle -> {
+                            FilledTonalButton(onClick = onInstallClick) {
+                                Text(if (app.hasUpdate) "Update" else "Install")
+                            }
+                        }
+                        is InstallState.Downloading, is InstallState.Installing -> {
+                            IconButton(onClick = onCancelClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        is InstallState.Installed -> {
+                            TextButton(onClick = onCardClick) {
+                                Text("Open")
+                            }
+                        }
+                    }
+                }
+            }
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                items(4) { index ->
+                    Card(
+                        modifier = Modifier
+                            .width(110.dp)
+                            .height(180.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Preview ${index + 1}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun UpdatesScreen(
     viewModel: StoreViewModel,
     onAppClick: (AppItem) -> Unit
 ) {
     val apps by viewModel.apps.collectAsState()
-    // Filter apps that have an update available or are currently downloading/installing
     val updatesList = apps.filter { it.hasUpdate || it.state !is InstallState.Idle && it.state !is InstallState.Installed }
-
     val isAnyDownloading = updatesList.any { it.state is InstallState.Downloading || it.state is InstallState.Installing }
 
     Column(
@@ -187,7 +499,6 @@ fun UpdatesScreen(
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Top Bar Header & "Update all" / "Cancel all" Action Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -218,7 +529,6 @@ fun UpdatesScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (updatesList.isEmpty()) {
-            // "You're all set" Empty State matching Google Play
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -259,7 +569,7 @@ fun UpdatesScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { /* Refresh/Check action */ },
+                        onClick = { },
                         shape = RoundedCornerShape(50)
                     ) {
                         Text("Check for updates")
@@ -267,7 +577,6 @@ fun UpdatesScreen(
                 }
             }
         } else {
-            // List of Update items matching Google Play layout
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
@@ -317,21 +626,21 @@ fun UpdateCardItem(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    // Circular progress during download or normal icon container
                     when (app.state) {
                         is InstallState.Downloading -> {
                             val progress = (app.state as InstallState.Downloading).progress
-                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator(
                                     progress = { progress },
                                     modifier = Modifier.fillMaxSize(),
                                     strokeWidth = 3.dp,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
                                         .background(MaterialTheme.colorScheme.surfaceVariant),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -359,15 +668,33 @@ fun UpdateCardItem(
                             is InstallState.Downloading -> {
                                 val progress = (app.state as InstallState.Downloading).progress
                                 val percent = (progress * 100).toInt()
-                                Text(
-                                    text = "${app.size}  $percent% of 20.07 MB",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Column {
+                                    Text(
+                                        text = "$percent% of ${app.size}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Security,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Verified secure",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                             }
                             is InstallState.Installing -> {
                                 Text(
-                                    text = "${app.size}  Installing...",
+                                    text = "Installing...",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -383,7 +710,6 @@ fun UpdateCardItem(
                     }
                 }
 
-                // Trailing Action Controls (Update button, Cancel 'X' button, or Dropdown Arrow)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     when (app.state) {
                         is InstallState.Idle -> {
@@ -415,7 +741,6 @@ fun UpdateCardItem(
                 }
             }
 
-            // Collapsible "What's new" section matching Google Play layout
             if (expanded) {
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(modifier = Modifier.fillMaxWidth().height(1.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -452,7 +777,9 @@ fun AppStorePreview() {
 @Composable
 fun HomeScreen(
     viewModel: StoreViewModel,
-    onAppClick: (AppItem) -> Unit
+    onAppClick: (AppItem) -> Unit,
+    onSeeAllUkApps: () -> Unit,
+    onSeeAllEditorsChoice: () -> Unit
 ) {
     val apps by viewModel.apps.collectAsState()
     val repositories by viewModel.repositories.collectAsState()
@@ -464,47 +791,16 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+        if (apps.isNotEmpty()) {
+            item {
+                HeroBannerCard(
+                    app = apps.first(),
+                    heroTitle = "Meet Claude Opus 5.5",
+                    heroSubtitle = "Our most capable AI model for your custom workspace.",
+                    onCardClick = { onAppClick(apps.first()) },
+                    onInstallClick = { viewModel.startDownload(apps.first().id) },
+                    onCancelClick = { viewModel.cancelAction(apps.first().id) }
                 )
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    contentAlignment = Alignment.BottomStart
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = "Featured App",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                        Text(
-                            text = "NeoTerm Linux Terminal",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "A powerful terminal emulator built for custom OS tinkerers.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                            maxLines = 2
-                        )
-                    }
-                }
             }
         }
 
@@ -515,10 +811,35 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Recommended for You",
+                    text = "Apps made in the UK",
                     style = MaterialTheme.typography.titleMedium
                 )
-                TextButton(onClick = { }) {
+                TextButton(onClick = onSeeAllUkApps) {
+                    Text("See all")
+                }
+            }
+        }
+
+        if (apps.isNotEmpty()) {
+            item {
+                HorizontalAppsGrid(
+                    apps = apps.take(5),
+                    onAppClick = onAppClick
+                )
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Editors' Choice",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                TextButton(onClick = onSeeAllEditorsChoice) {
                     Text("See all")
                 }
             }
@@ -669,11 +990,29 @@ fun AppCardItem(
                         is InstallState.Downloading -> {
                             val progress = (app.state as InstallState.Downloading).progress
                             val percent = (progress * 100).toInt()
-                            Text(
-                                text = "$percent% of ${app.size}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Column {
+                                Text(
+                                    text = "$percent% of ${app.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Security,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Verified secure",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                         is InstallState.Installing -> {
                             Text(
@@ -700,13 +1039,14 @@ fun AppCardItem(
                             Text(if (app.hasUpdate) "Update" else "Install")
                         }
                     }
-                    is InstallState.Downloading -> {
-                        OutlinedButton(onClick = onCancelClick) {
-                            Text("Cancel")
+                    is InstallState.Downloading, is InstallState.Installing -> {
+                        IconButton(onClick = onCancelClick) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Cancel",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    }
-                    is InstallState.Installing -> {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                     is InstallState.Installed -> {
                         TextButton(onClick = onCardClick) {
